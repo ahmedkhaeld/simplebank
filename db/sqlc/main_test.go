@@ -1,30 +1,31 @@
 package db
 
 import (
-	"context"
+	"database/sql"
 	"log"
 	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 const (
 	dbSource = "postgresql://root:password@localhost:5432/simple_bank?sslmode=disable"
+	dbDriver = "pgx"
 )
 
 var testQueries *Queries
+var conn *sql.DB
 
 // TestMain sets up the test environment by creating a database connection and
 // populating the testQueries instance variable with a new instance of Queries.
 // It then invokes the m.Run method to run the tests and returns the exit code.
 func TestMain(m *testing.M) {
-	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, dbSource)
+	var err error
+	conn, err = sql.Open(dbDriver, dbSource)
 	if err != nil {
 		log.Fatal("Failed to connect", err)
 	}
-	defer conn.Close(ctx)
 	testQueries = New(conn)
 
 	os.Exit(m.Run())
