@@ -92,29 +92,18 @@ func (s *Store) TransferTx(ctx context.Context, args TransferTxParams) (Transfer
 			return err
 		}
 
-		//get the accounts from the db --> update its balance back to the db
-		//should be done with proper locking mechanism
-
 		//move money out from the FromAccount
-		fromAccount, err := q.GetAccount(ctx, args.FromAccountID)
-		if err != nil {
-			return err
-		}
-		result.FromAccount, err = q.UpdateAccount(ctx, UpdateAccountParams{
-			ID:      args.FromAccountID,
-			Balance: fromAccount.Balance - args.Amount,
+		result.FromAccount, err = q.UpdateAccountBalance(ctx, UpdateAccountBalanceParams{
+			Amount: -args.Amount,
+			ID:     args.FromAccountID,
 		})
 		if err != nil {
 			return err
 		}
 		//move money in to the ToAccount
-		toAccount, err := q.GetAccount(ctx, args.ToAccountID)
-		if err != nil {
-			return err
-		}
-		result.ToAccount, err = q.UpdateAccount(ctx, UpdateAccountParams{
-			ID:      args.ToAccountID,
-			Balance: toAccount.Balance + args.Amount,
+		result.ToAccount, err = q.UpdateAccountBalance(ctx, UpdateAccountBalanceParams{
+			Amount: args.Amount,
+			ID:     args.ToAccountID,
 		})
 		if err != nil {
 			return err
