@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestTransferTx test One Way direction of money transfer, Sender only sends money, Reciever only receives money
 func TestTransferTx(t *testing.T) {
 	store := NewStore(conn)
 
@@ -154,6 +155,7 @@ func TestTransferTx(t *testing.T) {
 }
 
 // TestTransferTx runs n concurrent transfer transactions
+// test one way direction of money transfer, Sender only sends money, Reciever only receives money
 func TestConcurrentTransferTx(t *testing.T) {
 	store := NewStore(conn)
 
@@ -319,5 +321,65 @@ func TestConcurrentTransferTx(t *testing.T) {
 	// balance of ToAccount should be increased by amount * number of transfers completed
 	require.Equal(t, beforeFromAccountRecord.Balance-amount*int64(n), afterFromAccountRecord.Balance)
 	require.Equal(t, beforeToAccountRecord.Balance+amount*int64(n), afterToAccountRecord.Balance)
+
+}
+
+// TestConcurrentTransferTxBiDirection runs n concurrent transfer transactions
+// test Two way directions of money transfer, Twos side of money transfer transaction can send and receive money
+func TestConcurrentTransferTxBiDirection(t *testing.T) {
+	store := NewStore(conn)
+
+	// prepare two  mock accounts records in the Accounts table, which the transfer will occur between them.
+	// each Account Record should ID, Balance
+	accountOne := createAccountHelper(t)
+	accountTwo := createAccountHelper(t)
+
+	amount := int64(100)
+	n := 10
+
+	// create channels for errors a
+	chErrs := make(chan error)
+
+	for i := 0; i < n; i++ {
+
+		fromAccountID := accountOne.ID
+		toAccountID := accountTwo.ID
+
+		//reverse the sender and receiver, account one receiving 5 txs and send 5 txs, same for account two
+		if i%2 == 1 {
+			fromAccountID = accountTwo.ID
+			toAccountID = accountOne.ID
+		}
+
+		go func() {
+			ctx := context.Background()
+
+			_, err := store.TransferTx(ctx, TransferTxParams{
+				FromAccountID: fromAccountID,
+				ToAccountID:   toAccountID,
+				Amount:        amount,
+			})
+			chErrs <- err
+		}()
+	}
+
+	for i := 0; i < n; i++ {
+		err := <-chErrs
+		require.NoError(t, err)
+
+	}
+	// we expect as the amount of money send equals the amount of the money received
+	// the balance should remain the same
+
+	// get the updated account from the database
+	afterFromAccountRecord, err := store.GetAccount(context.Background(), accountOne.ID)
+	require.NoError(t, err)
+	afterToAccountRecord, err := store.GetAccount(context.Background(), accountTwo.ID)
+	require.NoError(t, err)
+
+	fmt.Println(">>> after transfer")
+
+	require.Equal(t, accountOne.Balance, afterFromAccountRecord.Balance)
+	require.Equal(t, accountTwo.Balance, afterToAccountRecord.Balance)
 
 }
