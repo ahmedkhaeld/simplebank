@@ -6,12 +6,9 @@ import (
 	"os"
 	"testing"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
-)
+	"github.com/ahmedkhaeld/simplebank/util"
 
-const (
-	dbSource = "postgresql://root:password@localhost:5432/simple_bank?sslmode=disable"
-	dbDriver = "pgx"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 var testQueries *Queries
@@ -22,7 +19,11 @@ var conn *sql.DB
 // It then invokes the m.Run method to run the tests and returns the exit code.
 func TestMain(m *testing.M) {
 	var err error
-	conn, err = sql.Open(dbDriver, dbSource)
+	env, err := util.LoadEnv("../..")
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn, err = sql.Open(env.DBDriver, env.DBSource)
 	if err != nil {
 		log.Fatal("Failed to connect", err)
 	}
