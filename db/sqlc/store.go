@@ -6,20 +6,27 @@ import (
 	"fmt"
 )
 
-type Store struct {
+// Store represents a database connection to a database server
+// and a mock database for testing purposes
+type Store interface {
+	Querier
+	TransferTx(ctx context.Context, args TransferTxParams) (TransferTxResult, error)
+}
+
+type SQLStore struct {
 	*Queries
 	db *sql.DB
 }
 
-func NewStore(db *sql.DB) *Store {
-	return &Store{
+func NewStore(db *sql.DB) Store {
+	return &SQLStore{
 		Queries: New(db),
 		db:      db,
 	}
 }
 
 // execTransaction a wrapper that executes the given function within a transaction.
-func (s *Store) execTransaction(ctx context.Context, fn func(*Queries) error) error {
+func (s *SQLStore) execTransaction(ctx context.Context, fn func(*Queries) error) error {
 	// Begin a transaction.
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -63,7 +70,7 @@ type TransferTxResult struct {
 // 2- create two entries one for from account with balance decreased, and for to account with balance increased
 //
 // 3. update the from account balance, and update the to account balance
-func (s *Store) TransferTx(ctx context.Context, args TransferTxParams) (TransferTxResult, error) {
+func (s *SQLStore) TransferTx(ctx context.Context, args TransferTxParams) (TransferTxResult, error) {
 	var result TransferTxResult
 
 	err := s.execTransaction(ctx, func(q *Queries) error {
@@ -94,7 +101,7 @@ func (s *Store) TransferTx(ctx context.Context, args TransferTxParams) (Transfer
 	return result, err
 }
 
-func (s *Store) createTransferAndEntries(ctx context.Context, q *Queries, result *TransferTxResult, args TransferTxParams) error {
+func (s *SQLStore) createTransferAndEntries(ctx context.Context, q *Queries, result *TransferTxResult, args TransferTxParams) error {
 	var err error
 
 	createParams := CreateTransferParams(args)
@@ -116,14 +123,14 @@ func (s *Store) createTransferAndEntries(ctx context.Context, q *Queries, result
 	return nil
 }
 
-func (s *Store) createEntry(ctx context.Context, q *Queries, accountID int64, amount int64) (Entry, error) {
+func (s *SQLStore) createEntry(ctx context.Context, q *Queries, accountID int64, amount int64) (Entry, error) {
 	return q.CreateEntry(ctx, CreateEntryParams{
 		AccountID: accountID,
 		Amount:    amount,
 	})
 }
 
-func (s *Store) updateAccountBalances(ctx context.Context, q *Queries, result *TransferTxResult, fromAccountID, fromAmount, toAccountID, toAmount int64) error {
+func (s *SQLStore) updateAccountBalances(ctx context.Context, q *Queries, result *TransferTxResult, fromAccountID, fromAmount, toAccountID, toAmount int64) error {
 	var err error
 
 	result.FromAccount, err = q.UpdateAccountBalance(ctx, UpdateAccountBalanceParams{

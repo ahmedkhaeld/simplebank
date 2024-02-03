@@ -70,6 +70,10 @@ func (s *Server) GetAccount(ctx *gin.Context) {
 			})
 			return
 		}
+		httpResponse(ctx, Response{
+			Status: http.StatusInternalServerError,
+			Error:  err.Error(),
+		})
 		return
 	}
 	data := make(map[string]any)
