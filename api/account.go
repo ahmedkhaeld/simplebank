@@ -30,10 +30,27 @@ func (s *Server) CreateAccount(ctx *gin.Context) {
 
 	account, err := s.store.CreateAccount(ctx, args)
 	if err != nil {
+		//TODO: handle error in the request tag validation
+		// Check if the error has an SQLState method
+		if sqlErr, ok := err.(interface{ SQLState() string }); ok {
+			// Access the SQL state code
+			sqlState := sqlErr.SQLState()
+			//23505  23503
+			switch sqlState {
+			case "23503", "23505": // Unique violation (might not be accurate)
+				httpResponse(ctx, Response{
+					Status: http.StatusForbidden,
+					Error:  err.Error(),
+				})
+				return
+
+			}
+		}
 		httpResponse(ctx, Response{
 			Status: http.StatusInternalServerError,
-			Error:  err.Error(),
+			Error:  "Internal server error: " + err.Error(),
 		})
+
 		return
 	}
 	data := make(map[string]any)

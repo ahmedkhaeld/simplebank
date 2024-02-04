@@ -10,9 +10,10 @@ import (
 )
 
 func createAccountHelper(t *testing.T) Account {
+	user := createUserHelper(t)
 	ctx := context.Background()
 	arg := CreateAccountParams{
-		Owner:    util.RandomAccountOwner(),
+		Owner:    user.Username,
 		Balance:  util.RandomMoney(),
 		Currency: util.RandomAccountCurrency(),
 	}
