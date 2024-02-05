@@ -1,8 +1,10 @@
 package api
 
 import (
+	"errors"
 	"net/http"
-	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
 	"github.com/ahmedkhaeld/simplebank/util"
@@ -17,13 +19,6 @@ type createUserRequest struct {
 }
 
 // userResponse purposes execlude the password from the response body
-type userResponse struct {
-	Username          string    `json:"username"`
-	FullName          string    `json:"full_name"`
-	Email             string    `json:"email"`
-	PasswordChangedAt time.Time `json:"password_changed_at"`
-	CreatedAt         time.Time `json:"created_at"`
-}
 
 func (server *Server) CreateUser(ctx *gin.Context) {
 	var req createUserRequest
@@ -53,17 +48,17 @@ func (server *Server) CreateUser(ctx *gin.Context) {
 
 	user, err := server.store.CreateUser(ctx, arg)
 	if err != nil {
-		//TODO: handle error in the request tag validation
-		if sqlErr, ok := err.(interface{ SQLState() string }); ok {
-			sqlState := sqlErr.SQLState()
-			switch sqlState {
-			case "23503", "23505":
-				httpResponse(ctx, Response{
-					Status: http.StatusForbidden,
-					Error:  err.Error(),
-				})
+		//TODO: handle error in the request tag validation, prevent user to enter existing username or email
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" {
+				httpResponse(
+					ctx,
+					Response{
+						Status: http.StatusForbidden,
+						Error:  err.Error(),
+					})
 				return
-
 			}
 		}
 		httpResponse(ctx, Response{
@@ -75,13 +70,7 @@ func (server *Server) CreateUser(ctx *gin.Context) {
 	}
 
 	data := make(map[string]any)
-	data["user"] = userResponse{
-		Username:          user.Username,
-		FullName:          user.FullName,
-		Email:             user.Email,
-		PasswordChangedAt: user.PasswordChangedAt,
-		CreatedAt:         user.CreatedAt,
-	}
+	data["user"] = user
 
 	httpResponse(ctx, Response{
 		Data:   data,
