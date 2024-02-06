@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/http"
 
 	customValidator "github.com/ahmedkhaeld/simplebank/api/custom-validators"
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
@@ -49,16 +50,17 @@ func (server *Server) Start(address string) error {
 func (server *Server) setupRouter() {
 
 	router := gin.Default()
+	apiRoutes := router.Group("/api")
 
-	router.POST("/api/accounts", server.CreateAccount)
-	router.GET("api/accounts", server.ListAccounts)
-	router.GET("api/accounts/:id", server.GetAccount)
+	apiRoutes.POST("/users", server.CreateUser)
+	apiRoutes.POST("/users/login", server.LoginUser)
 
-	router.POST("/api/transfers", server.CreateTransfer)
+	authRoutes := apiRoutes.Group("/").Use(BearerMiddleware(server.tokenMaker))
 
-	router.POST("/api/users", server.CreateUser)
-
-	router.POST("/api/login", server.LoginUser)
+	authRoutes.POST("/api/accounts", server.CreateAccount)
+	authRoutes.GET("api/accounts", server.ListAccounts)
+	authRoutes.GET("api/accounts/:id", server.GetAccount)
+	authRoutes.POST("/api/transfers", server.CreateTransfer)
 
 	server.router = router
 
@@ -66,6 +68,13 @@ func (server *Server) setupRouter() {
 
 func httpResponse(ctx *gin.Context, r Response) {
 	ctx.JSON(r.Status, gin.H{"Error": r.Error, "Data": r.Data, "Message": r.Message})
+}
+
+func httpUnauthorized(ctx *gin.Context, err error) {
+	ctx.AbortWithStatusJSON(http.StatusUnauthorized, Response{
+		Status: http.StatusUnauthorized,
+		Error:  err.Error(),
+	})
 }
 
 type Response struct {
