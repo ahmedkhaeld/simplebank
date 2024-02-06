@@ -1,8 +1,10 @@
 package api
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -19,6 +21,23 @@ type createUserRequest struct {
 }
 
 // userResponse purposes execlude the password from the response body
+type userResponse struct {
+	Username          string    `json:"username"`
+	FullName          string    `json:"full_name"`
+	Email             string    `json:"email"`
+	PasswordChangedAt time.Time `json:"password_changed_at"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+func newUserResponse(user db.User) userResponse {
+	return userResponse{
+		Username:          user.Username,
+		FullName:          user.FullName,
+		Email:             user.Email,
+		PasswordChangedAt: user.PasswordChangedAt,
+		CreatedAt:         user.CreatedAt,
+	}
+}
 
 func (server *Server) CreateUser(ctx *gin.Context) {
 	var req createUserRequest
@@ -75,6 +94,70 @@ func (server *Server) CreateUser(ctx *gin.Context) {
 	httpResponse(ctx, Response{
 		Data:   data,
 		Status: http.StatusCreated,
+	})
+
+}
+
+type loginUserRequest struct {
+	Username string `json:"username" binding:"required,alphanum"`
+	Password string `json:"password" binding:"required,min=6"`
+}
+
+type loginUserResponse struct {
+	AccessToken string       `json:"access_token"`
+	User        userResponse `json:"user"`
+}
+
+func (server *Server) LoginUser(ctx *gin.Context) {
+	var req loginUserRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		httpResponse(ctx, Response{
+			Status: http.StatusBadRequest,
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	user, err := server.store.GetUser(ctx, req.Username)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			httpResponse(ctx, Response{
+				Status: http.StatusNotFound,
+				Error:  "User not found",
+			})
+			return
+		}
+		httpResponse(ctx, Response{
+			Status: http.StatusInternalServerError,
+			Error:  "Internal server error: " + err.Error(),
+		})
+		return
+	}
+
+	err = util.CheckPassword(req.Password, user.Password)
+	if err != nil {
+		httpResponse(ctx, Response{
+			Status: http.StatusUnauthorized,
+			Error:  err.Error(),
+		})
+		return
+	}
+
+	accessToken, err := server.tokenMaker.CreateToken(user.Username, server.env.AccessTokenDuration)
+	if err != nil {
+		httpResponse(ctx, Response{
+			Status: http.StatusInternalServerError,
+			Error:  "Internal server error: " + err.Error(),
+		})
+		return
+	}
+
+	httpResponse(ctx, Response{
+		Data: loginUserResponse{
+			AccessToken: accessToken,
+			User:        newUserResponse(user),
+		},
+		Status: http.StatusOK,
 	})
 
 }

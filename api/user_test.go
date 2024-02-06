@@ -216,6 +216,7 @@ func randomUser(t *testing.T) (user db.User, password string) {
 }
 
 func requireEqualUser(t *testing.T, expected db.User, body *bytes.Buffer) {
+	expectedUserResponse := newUserResponse(expected)
 	data, err := io.ReadAll(body)
 	require.NoError(t, err)
 
@@ -236,14 +237,13 @@ func requireEqualUser(t *testing.T, expected db.User, body *bytes.Buffer) {
 	passwordChangedAt, err := time.Parse(time.RFC3339, passwordChangedAtStr)
 	require.NoError(t, err, "failed to parse password_changed_at time")
 
-	gotUser := db.User{
+	gotUser := userResponse{
 		Username:          userData["username"].(string),
 		Email:             userData["email"].(string),
-		Password:          userData["password"].(string),
 		FullName:          userData["full_name"].(string),
 		PasswordChangedAt: passwordChangedAt,
 		CreatedAt:         createdAt,
 	}
 
-	require.Equal(t, expected, gotUser)
+	require.Equal(t, expectedUserResponse, gotUser)
 }

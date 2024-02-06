@@ -27,7 +27,6 @@ func NewServer(env util.Env, store db.Store) (*Server, error) {
 	}
 	server := &Server{
 		store:      store,
-		router:     gin.Default(),
 		tokenMaker: tokenMaker,
 		env:        env,
 	}
@@ -37,13 +36,7 @@ func NewServer(env util.Env, store db.Store) (*Server, error) {
 		v.RegisterValidation("currency", customValidator.ValidateCurrency)
 	}
 
-	server.router.POST("/api/accounts", server.CreateAccount)
-	server.router.GET("api/accounts", server.ListAccounts)
-	server.router.GET("api/accounts/:id", server.GetAccount)
-
-	server.router.POST("/api/transfers", server.CreateTransfer)
-
-	server.router.POST("/api/users", server.CreateUser)
+	server.setupRouter()
 
 	return server, nil
 
@@ -51,6 +44,24 @@ func NewServer(env util.Env, store db.Store) (*Server, error) {
 
 func (server *Server) Start(address string) error {
 	return server.router.Run(address)
+}
+
+func (server *Server) setupRouter() {
+
+	router := gin.Default()
+
+	router.POST("/api/accounts", server.CreateAccount)
+	router.GET("api/accounts", server.ListAccounts)
+	router.GET("api/accounts/:id", server.GetAccount)
+
+	router.POST("/api/transfers", server.CreateTransfer)
+
+	router.POST("/api/users", server.CreateUser)
+
+	router.POST("/api/login", server.LoginUser)
+
+	server.router = router
+
 }
 
 func httpResponse(ctx *gin.Context, r Response) {
