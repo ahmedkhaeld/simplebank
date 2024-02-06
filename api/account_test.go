@@ -87,7 +87,7 @@ func TestGetAccountAPI(t *testing.T) {
 			//Create HTTP Server and Recorder:
 			//It creates an instance of the server
 			//and an HTTP response recorder for capturing the server's response.
-			server := NewServer(store)
+			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/api/accounts/%d", tc.accountID)
