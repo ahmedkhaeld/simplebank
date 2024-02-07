@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -18,25 +17,6 @@ type createUserRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 	FullName string `json:"full_name" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
-}
-
-// userResponse purposes execlude the password from the response body
-type userResponse struct {
-	Username          string    `json:"username"`
-	FullName          string    `json:"full_name"`
-	Email             string    `json:"email"`
-	PasswordChangedAt time.Time `json:"password_changed_at"`
-	CreatedAt         time.Time `json:"created_at"`
-}
-
-func newUserResponse(user db.User) userResponse {
-	return userResponse{
-		Username:          user.Username,
-		FullName:          user.FullName,
-		Email:             user.Email,
-		PasswordChangedAt: user.PasswordChangedAt,
-		CreatedAt:         user.CreatedAt,
-	}
 }
 
 func (server *Server) CreateUser(ctx *gin.Context) {
@@ -103,11 +83,6 @@ type loginUserRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }
 
-type loginUserResponse struct {
-	AccessToken string       `json:"access_token"`
-	User        userResponse `json:"user"`
-}
-
 func (server *Server) LoginUser(ctx *gin.Context) {
 	var req loginUserRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -152,11 +127,12 @@ func (server *Server) LoginUser(ctx *gin.Context) {
 		return
 	}
 
+	data := make(map[string]any)
+	data["user"] = user
+	data["access_token"] = accessToken
+
 	httpResponse(ctx, Response{
-		Data: loginUserResponse{
-			AccessToken: accessToken,
-			User:        newUserResponse(user),
-		},
+		Data:   data,
 		Status: http.StatusOK,
 	})
 

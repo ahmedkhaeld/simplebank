@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
+	"github.com/ahmedkhaeld/simplebank/token"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,11 +27,30 @@ func (s *Server) CreateTransfer(ctx *gin.Context) {
 		return
 	}
 
-	if !s.validAccount(ctx, req.FromAccountID, req.Currency) {
+	fromAccount, valid := s.validAccount(ctx, req.FromAccountID, req.Currency)
+	if !valid {
+		return
+	}
+	//make sure the auth user that will send the money is eq to fromAccount
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	authUser, err := authPayload.GetSubject()
+	if err != nil {
+		httpResponse(ctx, Response{
+			Status: http.StatusBadRequest,
+			Error:  err.Error(),
+		})
+		return
+	}
+	if authUser != fromAccount.Owner {
+		httpResponse(ctx, Response{
+			Status: http.StatusUnauthorized,
+			Error:  "Account is not authorized to send the money",
+		})
 		return
 	}
 
-	if !s.validAccount(ctx, req.ToAccountID, req.Currency) {
+	_, valid = s.validAccount(ctx, req.ToAccountID, req.Currency)
+	if !valid {
 		return
 	}
 
@@ -58,7 +78,7 @@ func (s *Server) CreateTransfer(ctx *gin.Context) {
 
 }
 
-func (s *Server) validAccount(ctx *gin.Context, accountID int64, currency string) bool {
+func (s *Server) validAccount(ctx *gin.Context, accountID int64, currency string) (db.Account, bool) {
 
 	account, err := s.store.GetAccount(ctx, accountID)
 	if err != nil {
@@ -67,7 +87,7 @@ func (s *Server) validAccount(ctx *gin.Context, accountID int64, currency string
 				Status: http.StatusNotFound,
 				Error:  err.Error(),
 			})
-			return false
+			return account, false
 		}
 		httpResponse(ctx, Response{
 			Status: http.StatusInternalServerError,
@@ -80,8 +100,8 @@ func (s *Server) validAccount(ctx *gin.Context, accountID int64, currency string
 			Status: http.StatusBadRequest,
 			Error:  fmt.Sprintf("Account %d does not have currency %s", accountID, currency),
 		})
-		return false
+		return account, false
 	}
 
-	return true
+	return account, true
 }
