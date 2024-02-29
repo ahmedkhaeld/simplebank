@@ -16,10 +16,10 @@ jobs:
           uses: actions/checkout@v3
         
         
-        - name: Install kubectl   
+        - name: Install kubectl
           uses: azure/setup-kubectl@v3
           with:
-             version: 'v1.29.2'
+            version: 'v1.29.2'
           id: install
 
         - name: Configure AWS credentials
@@ -48,10 +48,15 @@ jobs:
             docker push -a  $ECR_REGISTRY/$ECR_REPOSITORY
         - name: Update kube config
           run: aws eks update-kubeconfig --name simple-bank --region us-west-2
-        - name: Deploy image to Amazon EKS
+
+        - name: Ensure kubectl is in PATH
+          run: echo $PATH | grep -q /path/to/kubectl || echo 'export PATH=$PATH:/path/to/kubectl' >> $HOME/.bashrc
+          shell: bash  # Source the updated PATH environment variable
+
+        - name: Deploy image to Amazon EKS 
           run: |
-           kubectl apply -f eks/aws-auth.yaml
-           kubectl apply -f eks/deployment.yaml
-           kubectl apply -f eks/service.yaml
-           kuubectl apply -f eks/issuer.yaml
-           kubectl apply -f eks/ingress.yaml
+            kubectl apply -f eks/aws-auth.yaml
+            kubectl apply -f eks/deployment.yaml
+            kubectl apply -f eks/service.yaml
+            kubectl apply -f eks/issuer.yaml
+            kubectl apply -f eks/ingress.yaml
