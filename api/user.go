@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
@@ -83,6 +85,33 @@ type loginUserRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }
 
+type userResponse struct {
+	Username          string    `json:"username"`
+	FullName          string    `json:"full_name"`
+	Email             string    `json:"email"`
+	PasswordChangedAt time.Time `json:"password_changed_at"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+func newUserResponse(user db.User) userResponse {
+	return userResponse{
+		Username:          user.Username,
+		FullName:          user.FullName,
+		Email:             user.Email,
+		PasswordChangedAt: user.PasswordChangedAt,
+		CreatedAt:         user.CreatedAt,
+	}
+}
+
+type loginUserResponse struct {
+	SessionID             uuid.UUID    `json:"session_id"`
+	AccessToken           string       `json:"access_token"`
+	AccessTokenExpiresAt  time.Time    `json:"access_token_expires_at"`
+	RefreshToken          string       `json:"refresh_token"`
+	RefreshTokenExpiresAt time.Time    `json:"refresh_token_expires_at"`
+	User                  userResponse `json:"user"`
+}
+
 func (server *Server) LoginUser(ctx *gin.Context) {
 	var req loginUserRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -118,7 +147,17 @@ func (server *Server) LoginUser(ctx *gin.Context) {
 		return
 	}
 
-	accessToken, err := server.tokenMaker.CreateToken(user.Username, server.env.AccessTokenDuration)
+	accessToken, accessPayload, err := server.tokenMaker.CreateToken(user.Username, server.env.AccessTokenDuration)
+	if err != nil {
+		httpResponse(ctx, Response{
+			Status: http.StatusInternalServerError,
+			Error:  "Internal server error: " + err.Error(),
+		})
+		return
+	}
+	accessPayloadExpire, _ := accessPayload.MapClaims["exp"].(int64)
+
+	refreshToken, refreshPayload, err := server.tokenMaker.CreateToken(user.Username, server.env.RefreshTokenDuration)
 	if err != nil {
 		httpResponse(ctx, Response{
 			Status: http.StatusInternalServerError,
@@ -127,12 +166,29 @@ func (server *Server) LoginUser(ctx *gin.Context) {
 		return
 	}
 
-	data := make(map[string]any)
-	data["user"] = user
-	data["access_token"] = accessToken
+	refreshPayloadExpire, _ := refreshPayload.MapClaims["exp"].(int64)
+
+	session, err := server.store.CreateSession(ctx, db.CreateSessionParams{
+		ID:           refreshPayload.MapClaims["iss"].(uuid.UUID),
+		Username:     user.Username,
+		RefreshToken: refreshToken,
+		UserAgent:    ctx.Request.UserAgent(),
+		ClientIp:     ctx.ClientIP(),
+		IsBlocked:    false,
+		ExpiresAt:    time.Unix(refreshPayloadExpire, 0),
+	})
+
+	rsp := loginUserResponse{
+		SessionID:             session.ID,
+		AccessToken:           accessToken,
+		AccessTokenExpiresAt:  time.Unix(accessPayloadExpire, 0),
+		RefreshToken:          refreshToken,
+		RefreshTokenExpiresAt: session.ExpiresAt,
+		User:                  newUserResponse(user),
+	}
 
 	httpResponse(ctx, Response{
-		Data:   data,
+		Data:   rsp,
 		Status: http.StatusOK,
 	})
 

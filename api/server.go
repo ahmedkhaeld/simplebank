@@ -54,6 +54,7 @@ func (server *Server) setupRouter() {
 
 	apiRoutes.POST("/users", server.CreateUser)
 	apiRoutes.POST("/users/login", server.LoginUser)
+	apiRoutes.POST("/tokens/renew_access", server.renewAccessToken)
 
 	authRoutes := apiRoutes.Group("/").Use(BearerMiddleware(server.tokenMaker))
 
