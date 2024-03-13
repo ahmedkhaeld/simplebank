@@ -46,12 +46,13 @@ func (server *Server) LoginUser(ctx context.Context, req *pb.LoginUserRequest) (
 	}
 	refreshPayloadExpire, _ := refreshPayload.MapClaims["exp"].(int64)
 
+	mtdt := server.extractMetaData(ctx)
 	session, err := server.store.CreateSession(ctx, db.CreateSessionParams{
 		ID:           refreshPayload.MapClaims["iss"].(uuid.UUID),
 		Username:     user.Username,
 		RefreshToken: refreshToken,
-		UserAgent:    "",
-		ClientIp:     "",
+		UserAgent:    mtdt.UserAgent,
+		ClientIp:     mtdt.ClientIp,
 		IsBlocked:    false,
 		ExpiresAt:    time.Unix(refreshPayloadExpire, 0),
 	})
