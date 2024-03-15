@@ -18,6 +18,9 @@ import (
 	"github.com/ahmedkhaeld/simplebank/gapi"
 	"github.com/ahmedkhaeld/simplebank/pb"
 	"github.com/ahmedkhaeld/simplebank/util"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var Env = util.Env{}
@@ -37,12 +40,25 @@ func main() {
 		log.Fatal("Failed to connect", err)
 	}
 
+	runDBMigration(Env.MigrationURL, Env.DBSource)
+
 	store := db.NewStore(conn)
 
 	go runGatewayServer(Env, store)
 
 	runGrpcServer(Env, store)
 
+}
+
+func runDBMigration(migrationURL string, dbSource string) {
+	migration, err := migrate.New(migrationURL, dbSource)
+	if err != nil {
+		log.Fatal("cannot create new migration instance:", err)
+	}
+	if err = migration.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatal("failed to run migrate up:", err)
+	}
+	log.Println("migrations created successfully")
 }
 
 func runGrpcServer(env util.Env, store db.Store) {
