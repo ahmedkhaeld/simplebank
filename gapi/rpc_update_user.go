@@ -17,9 +17,21 @@ import (
 
 func (server *Server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
 
+	authPayload, err := server.authenticate(ctx)
+	if err != nil {
+		return nil, unauthenticatedError(err)
+	}
+
 	violatoins := validateUpdateUserRequest(req)
 	if violatoins != nil {
 		return nil, invalidArgumentError(violatoins)
+	}
+	username, err := authPayload.GetSubject()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to find user")
+	}
+	if username != req.Username {
+		return nil, status.Errorf(codes.Unauthenticated, "you do not have permission to update this user")
 	}
 
 	arg := db.UpdateUserParams{
