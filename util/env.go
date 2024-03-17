@@ -7,6 +7,7 @@ import (
 )
 
 type Env struct {
+	Environment          string        `mapstructure:"ENV"`
 	HTTPServerAddress    string        `mapstructure:"HTTP_SERVER_ADDRESS"`
 	GRPCServerAddress    string        `mapstructure:"GRPC_SERVER_ADDRESS"`
 	DBDriver             string        `mapstructure:"DB_DRIVER"`
