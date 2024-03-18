@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -42,6 +41,11 @@ func PullNewTask(redisOpt asynq.RedisClientOpt, store db.Store) *QueueServer {
 				QueueCritical: 10,
 				QueueDefault:  5,
 			},
+			ErrorHandler: asynq.ErrorHandlerFunc(func(ctx context.Context, task *asynq.Task, err error) {
+				zlog.Error().Err(err).Str("type", task.Type()).
+					Bytes("payload", task.Payload()).Msg("process task failed")
+			}),
+			Logger: NewLogger(),
 		}),
 		store: store,
 	}
@@ -58,9 +62,12 @@ func (s *QueueServer) ProcessVerifyEmail(ctx context.Context, task *asynq.Task) 
 	}
 	user, err := s.store.GetUser(ctx, payload.Username)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("user does not exist: %v", asynq.SkipRetry)
-		}
+		// Note: ignore the skipRetry error
+		//create user tx will eventually be created, no need to do an error check if not found when the worker is created before this
+		// make the retry function do it thing, to try again to process the task
+		// if err == sql.ErrNoRows {
+		// 	return fmt.Errorf("user does not exist: %v", asynq.SkipRetry)
+		// }
 		return fmt.Errorf("failed to find user: %w", err)
 	}
 
