@@ -13,6 +13,7 @@ type Env struct {
 	DBDriver             string        `mapstructure:"DB_DRIVER"`
 	MigrationURL         string        `mapstructure:"MIGRATION_URL"`
 	DBSource             string        `mapstructure:"DB_SOURCE"`
+	RedisAddress         string        `mapstructure:"REDIS_ADDRESS"`
 	TokenSymmetricKey    string        `mapstructure:"TOKEN_SYMMETRIC_KEY"`
 	AccessTokenDuration  time.Duration `mapstructure:"ACCESS_TOKEN_DURATION"`
 	RefreshTokenDuration time.Duration `mapstructure:"REFRESH_TOKEN_DURATION"`

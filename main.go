@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/hibiken/asynq"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -18,6 +19,7 @@ import (
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
 	"github.com/ahmedkhaeld/simplebank/gapi"
 	"github.com/ahmedkhaeld/simplebank/pb"
+	"github.com/ahmedkhaeld/simplebank/tasks"
 	"github.com/ahmedkhaeld/simplebank/util"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -50,9 +52,15 @@ func main() {
 
 	store := db.NewStore(conn)
 
-	go runGatewayServer(Env, store)
+	redisOpt := asynq.RedisClientOpt{
+		Addr: Env.RedisAddress,
+	}
+	taskClient := tasks.PushNewTask(redisOpt)
 
-	runGrpcServer(Env, store)
+	go runTaskWorker(redisOpt, store)
+	go runGatewayServer(Env, store, taskClient)
+
+	runGrpcServer(Env, store, taskClient)
 
 }
 
@@ -67,11 +75,11 @@ func runDBMigration(migrationURL string, dbSource string) {
 	zlog.Info().Msg("db migrated successfully")
 }
 
-func runGrpcServer(env util.Env, store db.Store) {
+func runGrpcServer(env util.Env, store db.Store, taskClient tasks.QueueClient) {
 
 	//create and initialize a new gRPC server
 
-	server, err := gapi.NewServer(env, store)
+	server, err := gapi.NewServer(env, store, taskClient)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("failed to initialize gRPC server")
 	}
@@ -101,10 +109,10 @@ func runGrpcServer(env util.Env, store db.Store) {
 
 }
 
-func runGatewayServer(env util.Env, store db.Store) {
+func runGatewayServer(env util.Env, store db.Store, taskClient tasks.QueueClient) {
 
 	//create and initialize a new gRPC server
-	server, err := gapi.NewServer(env, store)
+	server, err := gapi.NewServer(env, store, taskClient)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("cannot create server")
 	}
@@ -163,4 +171,13 @@ func runGinServer(env util.Env, store db.Store) {
 		zlog.Fatal().Err(err).Msg("cannot start server")
 	}
 	zlog.Info().Msg("HTTP server started")
+}
+
+func runTaskWorker(redisOpt asynq.RedisClientOpt, store db.Store) {
+	taskWorker := tasks.PullNewTask(redisOpt, store)
+	zlog.Info().Msg("Start task worker")
+	err := taskWorker.Start()
+	if err != nil {
+		zlog.Fatal().Err(err).Msg("failed to start task worker")
+	}
 }

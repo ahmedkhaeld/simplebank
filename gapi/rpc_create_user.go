@@ -3,11 +3,14 @@ package gapi
 import (
 	"context"
 	"errors"
+	"time"
 
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
 	"github.com/ahmedkhaeld/simplebank/pb"
+	"github.com/ahmedkhaeld/simplebank/tasks"
 	"github.com/ahmedkhaeld/simplebank/util"
 	"github.com/ahmedkhaeld/simplebank/val"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -26,13 +29,30 @@ func (server *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to hash password: %s", err)
 	}
-	arg := db.CreateUserParams{
-		Username: req.GetUsername(),
-		Password: hashPassword,
-		FullName: req.GetFullName(),
-		Email:    req.GetEmail(),
+
+	arg := db.CreateUserTxParams{
+		CreateUserParams: db.CreateUserParams{
+			Username: req.GetUsername(),
+			Password: hashPassword,
+			FullName: req.GetFullName(),
+			Email:    req.GetEmail(),
+		},
+		AfterCreate: func(user db.User) error {
+			taskPayload := &tasks.PayloadVerifyEmail{
+				Username: user.Username,
+			}
+			//define queue options to be in the critical queue, with 10 max retries, and a timeout of 10 seconds
+			opts := []asynq.Option{
+				asynq.MaxRetry(10),
+				asynq.ProcessIn(10 * time.Second),
+				asynq.Queue(tasks.QueueCritical),
+			}
+			return server.taskClient.VerifyEmail(ctx, taskPayload, opts...)
+
+		},
 	}
-	user, err := server.store.CreateUser(ctx, arg)
+
+	txResult, err := server.store.CreateUserTx(ctx, arg)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
@@ -46,11 +66,11 @@ func (server *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest)
 
 	return &pb.CreateUserResponse{
 		User: &pb.User{
-			Username:          user.Username,
-			FullName:          user.FullName,
-			Email:             user.Email,
-			CreatedAt:         timestamppb.New(user.CreatedAt),
-			PasswordChangedAt: timestamppb.New(user.PasswordChangedAt),
+			Username:          txResult.User.Username,
+			FullName:          txResult.User.FullName,
+			Email:             txResult.User.Email,
+			CreatedAt:         timestamppb.New(txResult.User.CreatedAt),
+			PasswordChangedAt: timestamppb.New(txResult.User.PasswordChangedAt),
 		},
 	}, nil
 
