@@ -41,7 +41,9 @@ func (server *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest)
 			taskPayload := &tasks.PayloadVerifyEmail{
 				Username: user.Username,
 			}
-			//define queue options to be in the critical queue, with 10 max retries, and a timeout of 10 seconds
+			//define queue options to be in the critical queue, with 10 max retries,
+			// process the task after 10 seconds so the worker when pick up the task, which is dependent on on  the users table
+			//worker must found a user row for in the db table
 			opts := []asynq.Option{
 				asynq.MaxRetry(10),
 				asynq.ProcessIn(10 * time.Second),
