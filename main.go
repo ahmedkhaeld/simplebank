@@ -18,6 +18,7 @@ import (
 	"github.com/ahmedkhaeld/simplebank/api"
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
 	"github.com/ahmedkhaeld/simplebank/gapi"
+	"github.com/ahmedkhaeld/simplebank/mail"
 	"github.com/ahmedkhaeld/simplebank/pb"
 	"github.com/ahmedkhaeld/simplebank/tasks"
 	"github.com/ahmedkhaeld/simplebank/util"
@@ -57,7 +58,7 @@ func main() {
 	}
 	taskClient := tasks.PushNewTask(redisOpt)
 
-	go runTaskWorker(redisOpt, store)
+	go runTaskWorker(Env, redisOpt, store)
 	go runGatewayServer(Env, store, taskClient)
 
 	runGrpcServer(Env, store, taskClient)
@@ -173,8 +174,11 @@ func runGinServer(env util.Env, store db.Store) {
 	zlog.Info().Msg("HTTP server started")
 }
 
-func runTaskWorker(redisOpt asynq.RedisClientOpt, store db.Store) {
-	taskWorker := tasks.PullNewTask(redisOpt, store)
+func runTaskWorker(env util.Env, redisOpt asynq.RedisClientOpt, store db.Store) {
+
+	mailer := mail.NewGmail(env.EmailSenderName, env.EmailSenderAddress, env.EmailSenderPassword)
+
+	taskWorker := tasks.PullNewTask(redisOpt, store, mailer)
 	zlog.Info().Msg("Start task worker")
 	err := taskWorker.Start()
 	if err != nil {

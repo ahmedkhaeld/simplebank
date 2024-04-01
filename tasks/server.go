@@ -8,6 +8,8 @@ import (
 	zlog "github.com/rs/zerolog/log"
 
 	db "github.com/ahmedkhaeld/simplebank/db/sqlc"
+	"github.com/ahmedkhaeld/simplebank/mail"
+	"github.com/ahmedkhaeld/simplebank/util"
 	"github.com/hibiken/asynq"
 )
 
@@ -30,11 +32,12 @@ const (
 type QueueServer struct {
 	server *asynq.Server
 	store  db.Store
+	mailer mail.Mailer
 }
 
 // PullNewTask
 
-func PullNewTask(redisOpt asynq.RedisClientOpt, store db.Store) *QueueServer {
+func PullNewTask(redisOpt asynq.RedisClientOpt, store db.Store, mailer mail.Mailer) *QueueServer {
 	return &QueueServer{
 		server: asynq.NewServer(redisOpt, asynq.Config{
 			Queues: map[string]int{
@@ -47,7 +50,8 @@ func PullNewTask(redisOpt asynq.RedisClientOpt, store db.Store) *QueueServer {
 			}),
 			Logger: NewLogger(),
 		}),
-		store: store,
+		store:  store,
+		mailer: mailer,
 	}
 }
 
@@ -71,7 +75,30 @@ func (s *QueueServer) ProcessVerifyEmail(ctx context.Context, task *asynq.Task) 
 		return fmt.Errorf("failed to find user: %w", err)
 	}
 
-	// TODO: send email to the user
+	// create verify_email record and  send email to the user
+	verifyemail, err := s.store.CreateVerifyEmail(ctx, db.CreateVerifyEmailParams{
+		Username:   user.Username,
+		Email:      user.Email,
+		SecretCode: util.RandomString(32),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create verify email: %w", err)
+	}
+
+	//mail parameters
+	subject := "Welcome to Simple Bank"
+	verifyUrl := fmt.Sprintf("http://localhost:8080/api/v1/verify_email?email_id=%d&secret_code=%s",
+		verifyemail.ID, verifyemail.SecretCode)
+	content := fmt.Sprintf(`Hello %s,<br/>
+	Thank you for registering with us!<br/>
+	Please <a href="%s">click here</a> to verify your email address.<br/>
+	`, user.FullName, verifyUrl)
+	to := []string{user.Email}
+
+	err = s.mailer.Send(subject, content, to, nil, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
 
 	zlog.Info().Str("type", task.Type()).Bytes("payload", task.Payload()).Str("email", user.Email).Msg("processed task")
 
